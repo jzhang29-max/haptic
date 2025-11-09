@@ -3,76 +3,103 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import pygame
+import cv2
 import time
 
-# === USER SETTINGS ===
-audio_path = "test.mp3"  # Replace with your audio file path
-hop_length = 1024
-n_fft = 2048
+# ============================================================
+# USER SETTINGS
+# ============================================================
+AUDIO_PATH = "test.mp3"
+BODY_IMAGE_PATH = "human.png"  # transparent PNG outline of human figure
+HOP_LENGTH = 1024
+N_FFT = 2048
 
-# === LOAD AUDIO ===
-y, sr = librosa.load(audio_path, sr=None, mono=True)
-S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))
+# ============================================================
+# LOAD AUDIO (Stereo)
+# ============================================================
+y, sr = librosa.load(AUDIO_PATH, sr=None, mono=False)
+if y.ndim == 1:  # mono fallback
+    y = np.vstack([y, y])
+
+# Compute STFT for each channel
+S_left = np.abs(librosa.stft(y[0], n_fft=N_FFT, hop_length=HOP_LENGTH))
+S_right = np.abs(librosa.stft(y[1], n_fft=N_FFT, hop_length=HOP_LENGTH))
 freqs = librosa.fft_frequencies(sr=sr)
-times = librosa.frames_to_time(np.arange(S.shape[1]), sr=sr, hop_length=hop_length)
+times = librosa.frames_to_time(np.arange(S_left.shape[1]), sr=sr, hop_length=HOP_LENGTH)
 
-# === DEFINE BODY ZONES AND FREQUENCY BANDS ===
-zones = {
-    "Ankles": (20, 100),
-    "Chest": (100, 400),
-    "Arms": (400, 1500),
-    "Hands": (1500, 4000),
+# ============================================================
+# DEFINE BODY ZONES AND FREQUENCY BANDS
+# ============================================================
+bands = {
+    "ankle": (20, 100),
+    "chest": (100, 300),
+    "arm": (300, 1000),
+    "hand": (1000, 4000),
 }
 
-def band_energy(low, high):
+# Compute energy per band and channel
+def band_energy(S, low, high):
     idx = np.where((freqs >= low) & (freqs < high))[0]
     return np.mean(S[idx, :], axis=0)
 
-energies = {zone: band_energy(low, high) for zone, (low, high) in zones.items()}
+energies = {}
+for zone, (low, high) in bands.items():
+    energies[f"{zone}_L"] = band_energy(S_left, low, high)
+    energies[f"{zone}_R"] = band_energy(S_right, low, high)
 
-# Normalize energy for consistent color scaling
+# Normalize energies
 max_val = max([np.max(v) for v in energies.values()])
-for z in energies:
-    energies[z] /= max_val
+for k in energies:
+    energies[k] = energies[k] / max_val
 
-# === PYGAME SOUND PLAYBACK ===
-pygame.mixer.init(frequency=sr)
-pygame.mixer.music.load(audio_path)
+# ============================================================
+# LOAD BODY IMAGE
+# ============================================================
+img = cv2.imread(BODY_IMAGE_PATH)
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+img = cv2.resize(img, (400, 800))
 
-# === MATPLOTLIB SETUP ===
-fig, ax = plt.subplots(figsize=(6, 8))
-ax.set_xlim(0, 6)
-ax.set_ylim(0, 8)
-ax.axis("off")
+fig, ax = plt.subplots(figsize=(4, 8))
 fig.patch.set_facecolor("black")
+ax.axis("off")
+ax.imshow(img)
 
-# Circle positions for body zones
+# ============================================================
+# DEFINE ZONE POSITIONS (x, y in image coords)
+# ============================================================
 positions = {
-    "Ankles": (3, 1),
-    "Chest": (3, 4),
-    "Arms": (2, 5.5),
-    "Hands": (4, 5.5),
+    "ankle_L": (120, 720),
+    "ankle_R": (280, 720),
+    "chest_L": (170, 400),
+    "chest_R": (230, 400),
+    "arm_L": (100, 300),
+    "arm_R": (300, 300),
+    "hand_L": (70, 220),
+    "hand_R": (330, 220),
 }
 
-# Create circles and text labels
-circles = {}
-for z, (x, y) in positions.items():
-    c = plt.Circle((x, y), 0.6, color="blue", alpha=0.2)
-    ax.add_patch(c)
-    ax.text(x, y, z, ha="center", va="center", color="white", fontsize=10)
-    circles[z] = c
+# Create scatter points for visualization
+scatters = {zone: ax.scatter(x, y, s=800, color="black") for zone, (x, y) in positions.items()}
 
-# Add colorbar (vibration intensity)
+# Add colorbar
 sm = plt.cm.ScalarMappable(cmap="plasma", norm=plt.Normalize(vmin=0, vmax=1))
 cbar = plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
 cbar.set_label("Vibration Intensity", color="white")
-plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color='white')
+plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
 
-# === ANIMATION FUNCTION ===
-frame_rate = sr / hop_length
+# ============================================================
+# AUDIO PLAYBACK WITH PYGAME
+# ============================================================
+pygame.mixer.init(frequency=sr)
+pygame.mixer.music.load(AUDIO_PATH)
+
+frame_rate = sr / HOP_LENGTH
 frame_count = len(times)
 start_time = None
 
+# ============================================================
+# ANIMATION UPDATE FUNCTION
+# ============================================================
 def update(frame):
     global start_time
 
@@ -80,20 +107,20 @@ def update(frame):
         pygame.mixer.music.play()
         start_time = time.time()
 
-    # Sync to audio playback
     current_time = time.time() - start_time
     target_frame = int(current_time * frame_rate)
     if target_frame >= frame_count:
         pygame.mixer.music.stop()
         plt.close()
-        return circles.values()
+        return []
 
-    for z, c in circles.items():
-        energy = energies[z][target_frame]
-        c.set_color(plt.cm.plasma(energy))
-        c.set_alpha(0.3 + 0.7 * energy)  # blend color by intensity
-
-    return circles.values()
+    # Update scatter points based on intensity
+    for zone, sc in scatters.items():
+        energy = energies[zone][target_frame]
+        color = plt.cm.plasma(energy)
+        sc.set_color(color)
+        sc.set_alpha(0.2 + 0.8 * energy)
+    return scatters.values()
 
 ani = FuncAnimation(fig, update, frames=frame_count, interval=1000/frame_rate, blit=False)
 plt.show()
