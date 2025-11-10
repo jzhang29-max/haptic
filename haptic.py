@@ -1,15 +1,3 @@
-"""
-Enhanced Haptic Visualizer - Modern UI with improved controls and analytics
-
-Key improvements:
-- Cleaner, modern UI with better color scheme
-- Working preset buttons with visual feedback
-- Improved slider controls with better responsiveness
-- Enhanced analytics plots with professional styling
-- Smoother animations and better performance
-- Clear visual hierarchy and spacing
-"""
-
 import os
 import json
 import math
@@ -37,7 +25,6 @@ try:
 except Exception:
     HAS_SIMPLEAUDIO = False
 
-# ---------------- Enhanced Config ----------------
 AUDIO_FILE = "test.mp3"
 ZONES_JSON = "zones_user.json"
 
@@ -71,7 +58,6 @@ DEFAULT_ZONES = {
     "hand_R":  {"pos": [0.77, 0.58], "band": [1500, 6000], "label": "Hand R", "gain": 1.0},
 }
 
-# ---------------- Utilities ----------------
 def load_zones(path, fallback=DEFAULT_ZONES):
     if os.path.exists(path):
         with open(path, "r") as f:
@@ -144,7 +130,6 @@ def play_buffer_simpleaudio(mono, sr):
     except Exception:
         return None
 
-# ---------------- Main Visualizer ----------------
 class HapticVisualizer:
     def __init__(self, audio_path=AUDIO_FILE, zones_json=ZONES_JSON):
         if not os.path.exists(audio_path):
@@ -340,7 +325,6 @@ class HapticVisualizer:
         time.sleep(0.05)
 
     def _build_controls(self):
-        """Build control panel UI."""
         # Title
         self.fig.text(0.73, 0.94, "CONTROL PANEL", color='white', 
                      fontsize=13, fontweight='bold')
@@ -443,7 +427,6 @@ class HapticVisualizer:
         self._update_preset_explanation()
 
     def _set_normal(self, event=None):
-        """Set normal preset."""
         self.preset = "normal"
         self._update_button_colors()
         self._update_preset_explanation()
@@ -451,21 +434,18 @@ class HapticVisualizer:
         self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
 
     def _set_bass(self, event=None):
-        """Set bass-heavy preset."""
         self.preset = "bass"
         self._update_button_colors()
         self._update_preset_explanation()
         self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
 
     def _set_treble(self, event=None):
-        """Set treble-heavy preset."""
         self.preset = "treble"
         self._update_button_colors()
         self._update_preset_explanation()
         self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
 
     def _update_button_colors(self):
-        """Update button colors to show active preset."""
         buttons = {
             'normal': self.btn_normal,
             'bass': self.btn_bass,
@@ -483,7 +463,6 @@ class HapticVisualizer:
         self.fig.canvas.draw_idle()
 
     def _update_preset_explanation(self):
-        """Update preset explanation text."""
         explanations = {
             "normal": ("Balanced frequency mapping.\n\nBass → Legs/Hips\nMids → Torso\nHighs → Arms/Hands"),
             "bass": ("Enhanced low-freq response for legs/hips.\n\nEmphasizes kick drums and basslines."),
@@ -527,7 +506,6 @@ class HapticVisualizer:
             self._press_candidate["pos"] = None
 
     def _on_move(self, event):
-        """Handle mouse move (dragging)."""
         if self._press_candidate["zone"] is None:
             return
         if event.inaxes != self.ax_body:
@@ -721,29 +699,12 @@ class HapticVisualizer:
         plt.show()
 
 
-# ---------------- Main Entry Point ----------------
 def main(audio=AUDIO_FILE, zones_json=ZONES_JSON):
     """Main function to run the visualizer."""
     if not os.path.exists(audio):
         print(f"Error: Audio file not found: {audio}")
         print("Please provide a valid audio file (MP3 or WAV)")
         return
-    
-    print("=" * 60)
-    print("HAPTIC VISUALIZER - Enhanced Edition")
-    print("=" * 60)
-    print("\nFeatures:")
-    print("  ✓ Real-time audio visualization")
-    print("  ✓ Interactive zone analytics")
-    print("  ✓ Draggable haptic markers")
-    print("  ✓ Multiple presets (Normal, Bass, Treble)")
-    print("  ✓ Adjustable smoothing and sensitivity")
-    print("\nControls:")
-    print("  • Click any marker to view detailed analytics")
-    print("  • Drag markers to reposition them")
-    print("  • Use sliders to adjust parameters")
-    print("  • Switch presets to emphasize different frequencies")
-    print("\n" + "=" * 60 + "\n")
     
     try:
         vis = HapticVisualizer(audio, zones_json)
