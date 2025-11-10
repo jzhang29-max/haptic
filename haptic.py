@@ -59,8 +59,8 @@ SENSITIVITY_DEFAULT = 1.0
 COLORMAP = "viridis"
 
 DEFAULT_ZONES = {
-    "ankle_L": {"pos": [0.48, 0.09], "band": [20, 120], "label": "Ankle L", "gain": 1.0},
-    "ankle_R": {"pos": [0.55, 0.09], "band": [20, 120], "label": "Ankle R", "gain": 1.0},
+    "ankle_L": {"pos": [0.465, 0.09], "band": [20, 120], "label": "Ankle L", "gain": 1.0},
+    "ankle_R": {"pos": [0.535, 0.09], "band": [20, 120], "label": "Ankle R", "gain": 1.0},
     "hip_L":   {"pos": [0.4303, 0.296], "band": [60, 250], "label": "Hip L", "gain": 1.0},
     "hip_R":   {"pos": [0.572, 0.296], "band": [60, 250], "label": "Hip R", "gain": 1.0},
     "chest_L": {"pos": [0.46, 0.54], "band": [100, 700], "label": "Chest L", "gain": 1.0},
@@ -270,11 +270,11 @@ class HapticVisualizer:
         ax.add_patch(left_arm)
         ax.add_patch(right_arm)
         
-        # Legs
-        left_leg = Polygon([(0.47, 0.26), (0.46, 0.05), (0.50, 0.05), (0.51, 0.26)], 
+        # Legs - centered at hip intersection
+        left_leg = Polygon([(0.465, 0.26), (0.445, 0.05), (0.485, 0.05), (0.495, 0.26)], 
                           closed=True, facecolor=BODY_FILL, edgecolor=BODY_EDGE, 
                           linewidth=2, zorder=1)
-        right_leg = Polygon([(0.51, 0.26), (0.54, 0.05), (0.58, 0.05), (0.55, 0.26)], 
+        right_leg = Polygon([(0.505, 0.26), (0.515, 0.05), (0.555, 0.05), (0.535, 0.26)], 
                            closed=True, facecolor=BODY_FILL, edgecolor=BODY_EDGE, 
                            linewidth=2, zorder=1)
         ax.add_patch(left_leg)
@@ -408,17 +408,37 @@ class HapticVisualizer:
         self.s_sens.valtext.set_fontsize(9)
         self.s_sens.on_changed(self._on_sens)
         
-        # Status - more compact
-        self.fig.text(0.73, 0.44, "STATUS", color='white', 
-                     fontsize=10, fontweight='bold')
-        self.status_text = self.fig.text(0.73, 0.39, "", color='#4a90e2', fontsize=9)
-        
-        # Instructions - much more compact
-        self.fig.text(0.73, 0.35, "INSTRUCTIONS", color='white', 
+        # Instructions - compact spacing
+        self.fig.text(0.73, 0.42, "INSTRUCTIONS", color='white', 
                      fontsize=10, fontweight='bold')
         instructions = ("• Click markers for analytics\n• Drag to reposition\n• Adjust sliders for effect\n• Try different presets")
-        self.fig.text(0.73, 0.28, instructions, color='#999999', 
-                     fontsize=8.5, verticalalignment='top', linespacing=1.6)
+        self.fig.text(0.73, 0.38, instructions, color='#999999', 
+                     fontsize=8.5, verticalalignment='top', linespacing=1.5)
+        
+        # Live frequency spectrum visualization
+        self.fig.text(0.73, 0.28, "LIVE SPECTRUM", color='white', 
+                     fontsize=10, fontweight='bold')
+        
+        ax_spectrum = self.fig.add_axes([0.73, 0.06, 0.24, 0.20])
+        ax_spectrum.set_facecolor('#0f1419')
+        ax_spectrum.set_xlim(0, 8000)
+        ax_spectrum.set_ylim(0, 1)
+        ax_spectrum.set_xlabel('Frequency (Hz)', color='white', fontsize=8)
+        ax_spectrum.set_ylabel('Magnitude', color='white', fontsize=8)
+        ax_spectrum.tick_params(colors='white', labelsize=7)
+        for spine in ax_spectrum.spines.values():
+            spine.set_color('white')
+        
+        # Create frequency bins for display
+        self.spectrum_freqs = np.linspace(0, 8000, 100)
+        self.spectrum_line, = ax_spectrum.plot(self.spectrum_freqs, 
+                                               np.zeros(100), 
+                                               color='#4a90e2', 
+                                               linewidth=2)
+        ax_spectrum.fill_between(self.spectrum_freqs, 0, 0, 
+                                alpha=0.3, color='#4a90e2')
+        self.spectrum_fill = ax_spectrum.collections[0]
+        self.ax_spectrum = ax_spectrum
         
         self._update_preset_explanation()
 
@@ -427,21 +447,22 @@ class HapticVisualizer:
         self.preset = "normal"
         self._update_button_colors()
         self._update_preset_explanation()
-        self._set_status("Preset: Normal")
+        # Force re-normalize with current smoothing
+        self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
 
     def _set_bass(self, event=None):
         """Set bass-heavy preset."""
         self.preset = "bass"
         self._update_button_colors()
         self._update_preset_explanation()
-        self._set_status("Preset: Bass-Heavy")
+        self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
 
     def _set_treble(self, event=None):
         """Set treble-heavy preset."""
         self.preset = "treble"
         self._update_button_colors()
         self._update_preset_explanation()
-        self._set_status("Preset: Treble-Heavy")
+        self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
 
     def _update_button_colors(self):
         """Update button colors to show active preset."""
@@ -475,18 +496,14 @@ class HapticVisualizer:
         """Handle smoothing slider change."""
         self.smoothing = float(v)
         self.normalized = self._normalize_and_smooth(self.energies, self.smoothing)
-        self._set_status(f"Smoothing: {self.smoothing:.2f}")
 
     def _on_sens(self, v):
         """Handle sensitivity slider change."""
         self.sensitivity = float(v)
-        self._set_status(f"Sensitivity: {self.sensitivity:.2f}")
 
     def _set_status(self, s):
-        """Update status text."""
-        ts = datetime.now().strftime("%H:%M:%S")
-        self.status_text.set_text(f"[{ts}] {s}")
-        self.fig.canvas.draw_idle()
+        """Update status text (removed - no longer used)."""
+        pass
 
     def _on_press(self, event):
         """Handle mouse press."""
@@ -550,18 +567,33 @@ class HapticVisualizer:
             z = self._dragging["zone"]
             save_zones(self.zones_json, self.zones)
             self._dragging["zone"] = None
-            pos = self.zones[z]['pos']
-            self._set_status(f"Moved {z} to ({pos[0]:.2f}, {pos[1]:.2f})")
 
     def _open_zone_analytics(self, zone):
         """Open analytics window for a zone."""
         low, high = self.zones[zone]["band"]
-        left_en = band_energy_mean(self.S_left, self.freqs, low, high)
-        right_en = band_energy_mean(self.S_right, self.freqs, low, high)
         
-        combined_max = max(np.max(left_en), np.max(right_en), 1e-9)
-        left_norm = left_en / combined_max
-        right_norm = right_en / combined_max
+        # Determine if this is left or right zone
+        is_left = zone.endswith("_L")
+        is_right = zone.endswith("_R")
+        
+        if is_left:
+            energy = band_energy_mean(self.S_left, self.freqs, low, high)
+            side_label = "Left"
+            side_color = '#ff6b9d'
+        elif is_right:
+            energy = band_energy_mean(self.S_right, self.freqs, low, high)
+            side_label = "Right"
+            side_color = '#4a90e2'
+        else:
+            # For center zones, use average
+            left_en = band_energy_mean(self.S_left, self.freqs, low, high)
+            right_en = band_energy_mean(self.S_right, self.freqs, low, high)
+            energy = 0.5 * (left_en + right_en)
+            side_label = "Center (L+R avg)"
+            side_color = '#9b59b6'
+        
+        energy_max = max(np.max(energy), 1e-9)
+        energy_norm = energy / energy_max
         t = self.times
         
         # Create styled analytics figure
@@ -580,19 +612,17 @@ class HapticVisualizer:
             ax.yaxis.label.set_color('white')
             ax.title.set_color('white')
         
-        # Plot 1: L/R energy over time
-        axes[0].plot(t, left_norm, label="Left", color='#ff6b9d', linewidth=2)
-        axes[0].plot(t, right_norm, label="Right", color='#4a90e2', linewidth=2)
-        axes[0].set_title("Left vs Right Band Energy Over Time", fontweight='bold')
+        # Plot 1: Energy over time for this side only
+        axes[0].plot(t, energy_norm, label=side_label, color=side_color, linewidth=2)
+        axes[0].set_title(f"{side_label} Band Energy Over Time ({low}-{high} Hz)", fontweight='bold')
         axes[0].set_xlabel("Time (s)")
         axes[0].set_ylabel("Normalized Energy")
         axes[0].legend(facecolor='#16213e', edgecolor='white', labelcolor='white')
         axes[0].grid(True, alpha=0.2, color='white')
         
         # Plot 2: Histogram
-        combined = 0.5 * (left_norm + right_norm)
-        axes[1].hist(combined, bins=50, color='#4a90e2', edgecolor='white', linewidth=0.5)
-        m, s, p = np.mean(combined), np.std(combined), np.max(combined)
+        axes[1].hist(energy_norm, bins=50, color=side_color, edgecolor='white', linewidth=0.5)
+        m, s, p = np.mean(energy_norm), np.std(energy_norm), np.max(energy_norm)
         axes[1].set_title("Activation Distribution", fontweight='bold')
         axes[1].set_xlabel("Normalized Energy")
         axes[1].set_ylabel("Count")
@@ -633,14 +663,18 @@ class HapticVisualizer:
         for z, arr in self.normalized.items():
             v = float(arr[idx]) if arr.size else 0.0
             
-            # Apply preset bias
+            # Apply preset bias - make it much more pronounced
             bias = 1.0
             if self.preset == "bass":
                 if "ankle" in z or "hip" in z:
-                    bias = 1.6
+                    bias = 2.5  # Increased from 1.6
+                else:
+                    bias = 0.5  # Reduce others
             elif self.preset == "treble":
                 if "hand" in z or "arm" in z:
-                    bias = 1.6
+                    bias = 2.5  # Increased from 1.6
+                else:
+                    bias = 0.5  # Reduce others
             
             # Apply gain and sensitivity
             v = v * bias * float(self.zones[z].get("gain", 1.0)) * self.sensitivity
@@ -660,6 +694,25 @@ class HapticVisualizer:
             
             sc.set_facecolor([rgba])
             sc.set_sizes([CIRCLE_BASE_SIZE * (0.6 + 0.8 * v)])
+        
+        # Update live spectrum visualization
+        if idx < self.frame_count:
+            # Get current frame spectrum (average L+R)
+            spectrum_slice = 0.5 * (self.S_left[:, idx] + self.S_right[:, idx])
+            
+            # Interpolate to display frequencies
+            if len(self.freqs) > 0:
+                spectrum_interp = np.interp(self.spectrum_freqs, self.freqs, spectrum_slice)
+                spectrum_norm = spectrum_interp / (np.max(spectrum_interp) + 1e-9)
+                
+                self.spectrum_line.set_ydata(spectrum_norm)
+                
+                # Update fill
+                self.spectrum_fill.remove()
+                self.spectrum_fill = self.ax_spectrum.fill_between(
+                    self.spectrum_freqs, 0, spectrum_norm,
+                    alpha=0.3, color='#4a90e2'
+                )
         
         return []
 
