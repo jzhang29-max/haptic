@@ -23,6 +23,7 @@ import threading
 from datetime import datetime
 
 import numpy as np
+import pygame
 from scipy import signal
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Polygon
@@ -171,6 +172,10 @@ class HapticVisualizer:
 
         # load audio
         self.left, self.right, self.mono, self.sr = read_audio_any(audio_path)
+        
+        pygame.mixer.init(frequency=self.sr)
+        pygame.mixer.music.load(self.audio_path)
+        pygame.mixer.music.play()
 
         # compute STFT magnitudes
         self.freqs, self.times, self.S_left = stft_abs(self.left, self.sr)
