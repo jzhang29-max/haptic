@@ -31,7 +31,6 @@ ZONES_JSON = "zones_user.json"
 N_FFT = 2048
 HOP_LENGTH = 1024
 
-# Modern color scheme
 BG_COLOR = "#1a1a2e"
 PANEL_BG = "#16213e"
 BODY_BG = "#f5f5f5"
@@ -325,11 +324,9 @@ class HapticVisualizer:
         time.sleep(0.05)
 
     def _build_controls(self):
-        # Title
         self.fig.text(0.73, 0.94, "CONTROL PANEL", color='white', 
                      fontsize=13, fontweight='bold')
         
-        # Preset buttons with better styling
         btn_width, btn_height = 0.20, 0.04
         btn_x = 0.74
         
@@ -360,7 +357,7 @@ class HapticVisualizer:
         self.btn_treble.label.set_fontsize(10)
         self.btn_treble.on_clicked(self._set_treble)
         
-        # Explanation box - more compact
+        # Explanation box
         self.fig.text(0.73, 0.74, "PRESET INFO", color='white', 
                      fontsize=10, fontweight='bold')
         
@@ -370,7 +367,7 @@ class HapticVisualizer:
         self.expl_text = expl_ax.text(0.05, 0.95, "", va='top', ha='left', 
                                       color='#cccccc', fontsize=8.5, wrap=True)
         
-        # Sliders - better positioned
+        # Sliders
         self.fig.text(0.73, 0.58, "PARAMETERS", color='white', 
                      fontsize=10, fontweight='bold')
         
@@ -392,7 +389,7 @@ class HapticVisualizer:
         self.s_sens.valtext.set_fontsize(9)
         self.s_sens.on_changed(self._on_sens)
         
-        # Instructions - compact spacing
+        # Instructions
         self.fig.text(0.73, 0.42, "INSTRUCTIONS", color='white', 
                      fontsize=10, fontweight='bold')
         instructions = ("• Click markers for analytics\n• Drag to reposition\n• Adjust sliders for effect\n• Try different presets")
@@ -641,18 +638,18 @@ class HapticVisualizer:
         for z, arr in self.normalized.items():
             v = float(arr[idx]) if arr.size else 0.0
             
-            # Apply preset bias - make it much more pronounced
+            # Apply preset bias
             bias = 1.0
             if self.preset == "bass":
                 if "ankle" in z or "hip" in z:
-                    bias = 2.5  # Increased from 1.6
+                    bias = 2.5
                 else:
-                    bias = 0.5  # Reduce others
+                    bias = 0.5
             elif self.preset == "treble":
                 if "hand" in z or "arm" in z:
-                    bias = 2.5  # Increased from 1.6
+                    bias = 2.5
                 else:
-                    bias = 0.5  # Reduce others
+                    bias = 0.5
             
             # Apply gain and sensitivity
             v = v * bias * float(self.zones[z].get("gain", 1.0)) * self.sensitivity
